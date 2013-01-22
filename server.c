@@ -23,7 +23,7 @@ typedef struct srp_server_arg_st {
 // for srp callbacks
 SRP_SERVER_ARG srp_server_arg = {"user","password"};
 
-int OpenListener(int port) {
+int startServerListener(int port) {
 	int sd;
 	struct sockaddr_in addr;
 
@@ -96,40 +96,34 @@ SSL_CTX* InitServerCTX(void) {
 	return ctx;
 }
 
-void Servlet(SSL* ssl){ /* Serve the connection -- threadable */
+void sslConnection(SSL* ssl) {
 	char buf[1024];
 	char reply[1024];
 	int sd, bytes;
-	const char* HTMLecho="I received %s :)\nWelcome here!\n";
+	const char* echo = "I received %s :)\nWelcome here!";
 
-//	// check the clients password and username
-//	if (SSL_set_srp_server_param_pw(ssl, "user", "password", "1024") != 1) {
-//		printf("SSL_set_srp_server_param_pw failed\n");
-//		ERR_print_errors_fp(stderr);
-//	}
+	int error = SSL_get_error(ssl, SSL_accept(ssl)); // start SSL and do Handshake
 
-	int error = SSL_get_error(ssl, SSL_accept(ssl));
-
-	if (error != SSL_ERROR_NONE) {    /* do SSL-protocol accept SSL_accept(ssl) != 1*/
+	if (error != SSL_ERROR_NONE) {
 		ERR_print_errors_fp (stderr);
-		printf("Error accepting SSL connection: %d\n", error);
-	} else {
-		bytes = SSL_read(ssl, buf, sizeof(buf)); /* get request */
-		if ( bytes > 0 ) {
+		printf("Error accepting SSL connection (%d)\n", error);
+	} else { // connection established successfully -> do some dummy communication
+		bytes = SSL_read(ssl, buf, sizeof(buf));
+		if (bytes > 0) {
 			buf[bytes] = 0;
 			printf("Client msg: \"%s\"\n", buf);
-			sprintf(reply, HTMLecho, buf);   /* construct reply */
-			SSL_write(ssl, reply, strlen(reply)); /* send reply */
-		} else
+			sprintf(reply, echo, buf);
+			SSL_write(ssl, reply, strlen(reply));
+		} else {
 			ERR_print_errors_fp(stderr);
+		}
 	}
-	sd = SSL_get_fd(ssl);       /* get socket connection */
-	SSL_free(ssl);         /* release SSL state */
-	close(sd);          /* close connection */
+	sd = SSL_get_fd(ssl);
+	SSL_free(ssl);
+	close(sd);
 }
 
 int main(int argc, char **argv) {
-	SSL_library_init();
 
 	if (argc < 2) {
 		printf("Usage: ./server <port>\n");
@@ -139,21 +133,31 @@ int main(int argc, char **argv) {
 	SSL_CTX *ctx;
 	int server;
 
-	ctx = InitServerCTX();        /* initialize SSL */
-	server = OpenListener(atoi(argv[1]));    /* create server socket */
+	// Create SSL Context
+	ctx = InitServerCTX();
+
+	// Listen on socket
+	server = startServerListener(atoi(argv[1]));
+
+	// keep port open until server is closed with CTRL+C
 	while (1) {
 		struct sockaddr_in addr;
 		socklen_t len = sizeof(addr);
 		SSL *ssl;
 
-		int client = accept(server, (struct sockaddr*)&addr, &len);  /* accept connection as usual */
-		ssl = SSL_new(ctx);              /* get new SSL state with context */
+		// open socket connection to client
+		int client = accept(server, (struct sockaddr*)&addr, &len);
+
+		// get SSL from context
+		ssl = SSL_new(ctx);
 		printf("Connection: %s:%d\n",inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-		printf("got ssl from ctx\n");
-		SSL_set_fd(ssl, client);      /* set connection socket to SSL state */
-		printf("set socket connection for this ssl\n");
-		Servlet(ssl);         /* service connection */
+
+		// connect SSL to client socket connection
+		SSL_set_fd(ssl, client);
+
+		// start SSL connection (including handshake and stuff)
+		sslConnection(ssl);
 	}
-	close(server);          /* close server socket */
-	SSL_CTX_free(ctx);         /* release context */
+	close(server);
+	SSL_CTX_free(ctx);
 }
