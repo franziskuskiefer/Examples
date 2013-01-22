@@ -65,7 +65,7 @@ static int ssl_srp_server_param_cb(SSL *s, int *ad, void *arg) {
 //		return SSL3_AL_FATAL;
 //	}
 
-	SSL_set_srp_server_param_pw(s, SSL_get_srp_username(s), "pwd", "1024");
+	SSL_set_srp_server_param_pw(s, SSL_get_srp_username(s), "password", "1024");
 
 	return SSL_ERROR_NONE;
 }
@@ -79,7 +79,7 @@ static int verify_callback(int ok, X509_STORE_CTX *ctx) {
 SSL_CTX* InitServerCTX(void) {
 	SSL_CTX *ctx;
 	// for srp callbacks
-	SRP_SERVER_ARG srp_server_arg = {"user","pwd"};
+	SRP_SERVER_ARG srp_server_arg = {"user","password"};
 
 	OpenSSL_add_all_algorithms();  /* load & register all cryptos, etc. */
 	SSL_load_error_strings();   /* load all error messages */
@@ -112,7 +112,7 @@ void Servlet(SSL* ssl){ /* Serve the connection -- threadable */
 	char buf[1024];
 	char reply[1024];
 	int sd, bytes;
-	const char* HTMLecho="<html><body><pre>%s</pre></body></html>\n\n";
+	const char* HTMLecho="I received %s :)\nWelcome here!\n";
 
 //	// check the clients password and username
 //	if (SSL_set_srp_server_param_pw(ssl, "user", "password", "1024") != 1) {
@@ -153,23 +153,19 @@ int main(int argc, char **argv) {
 
 	ctx = InitServerCTX();        /* initialize SSL */
 	server = OpenListener(atoi(argv[1]));    /* create server socket */
-//	while (1) {
-	struct sockaddr_in addr;
-	socklen_t len = sizeof(addr);
-	SSL *ssl;
+	while (1) {
+		struct sockaddr_in addr;
+		socklen_t len = sizeof(addr);
+		SSL *ssl;
 
-	int client = accept(server, (struct sockaddr*)&addr, &len);  /* accept connection as usual */
-	ssl = SSL_new(ctx);              /* get new SSL state with context */
-	printf("Connection: %s:%d\n",inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-//	STACK_OF(SSL_CIPHER) *ciphers = SSL_get_ciphers(ssl);
-//	while (sk_SSL_CIPHER_num(ciphers) > 0) {
-//		printf("%s\n",SSL_CIPHER_get_name(sk_SSL_CIPHER_pop(ciphers)));
-//	}
-	printf("got ssl from ctx\n");
-	SSL_set_fd(ssl, client);      /* set connection socket to SSL state */
-	printf("set socket connection for this ssl\n");
-	Servlet(ssl);         /* service connection */
-//	}
+		int client = accept(server, (struct sockaddr*)&addr, &len);  /* accept connection as usual */
+		ssl = SSL_new(ctx);              /* get new SSL state with context */
+		printf("Connection: %s:%d\n",inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+		printf("got ssl from ctx\n");
+		SSL_set_fd(ssl, client);      /* set connection socket to SSL state */
+		printf("set socket connection for this ssl\n");
+		Servlet(ssl);         /* service connection */
+	}
 	close(server);          /* close server socket */
 	SSL_CTX_free(ctx);         /* release context */
 }

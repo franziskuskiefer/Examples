@@ -50,18 +50,18 @@ static char *ssl_give_srp_client_pwd_cb(SSL *s, void *arg) {
 	// FIXME: arg is empty...
 //	SRP_CLIENT_ARG *srp_client_arg = (SRP_CLIENT_ARG *)arg;
 //	int i;
-//	for (i = 0; i < 10; ++i){
-//		printf("Password[%d]: %lu\n", i, (unsigned long)srp_client_arg->srppassin[i]);
+//	for(i = 0; i < 30; ++i){
+//		printf("%p : %lx\n", (SRP_CLIENT_ARG*)arg+i*sizeof(char), (unsigned long)*((char*)arg+i*sizeof(char)));
 //	}
 //	return BUF_strdup((char *)srp_client_arg->srppassin);
-	char* pwd = "pwd";
+	char* pwd = "password";
 	return BUF_strdup(pwd);
 }
 
 SSL_CTX* InitCTX(void) {
 	SSL_CTX *ctx;
 	// for srp callbacks
-	SRP_CLIENT_ARG srp_client_arg = {"pwd","user",0,0,0,1024};
+	SRP_CLIENT_ARG srp_client_arg = {"password","user",0,0,0,1024};
 
     OpenSSL_add_all_algorithms();  /* Load cryptos, et.al. */
     SSL_load_error_strings();   /* Bring in and register error messages */
@@ -72,6 +72,10 @@ SSL_CTX* InitCTX(void) {
 		ERR_print_errors_fp(stderr);
 		abort();
 	}
+
+	// Bug workarounds
+	SSL_CTX_set_options(ctx,SSL_OP_ALL);
+
 	// XXX: what does this?
 //	SSL_CTX_set_options(ctx, SSL_OP_ALL | SSL_OP_NO_SSLv2);
 	// SRP
@@ -82,7 +86,7 @@ SSL_CTX* InitCTX(void) {
 	}
 
     // set SRP stuff (user and password)
-    if (SSL_CTX_set_srp_username(ctx, srp_client_arg.srplogin) != 1){
+    if (!SSL_CTX_set_srp_username(ctx, srp_client_arg.srplogin)){
     	printf("SSL_CTX_set_srp_username failed");
     	ERR_print_errors_fp(stderr);
     }
@@ -125,15 +129,6 @@ int main(int argc, char **argv) {
 
     ssl = SSL_new(ctx);      /* create new SSL connection state */
     printf("Created ssl from ctx\n");
-
-
-
-//    STACK_OF(SSL_CIPHER) *ciphers = SSL_get_ciphers(ssl);
-//    while (sk_SSL_CIPHER_num(ciphers) > 0) {
-//    	SSL_CIPHER *c = sk_SSL_CIPHER_pop(ciphers);
-//    	printf("%s\n",SSL_CIPHER_get_name(c));
-////    	sk_SSL_CIPHER_push(ciphers, c);
-//    }
 
     SSL_set_fd(ssl, server);    /* attach the socket descriptor */
     printf("attached ssl to socket\n");
