@@ -18,8 +18,11 @@ all: server client
 server:
 	$(CC) $(CFLAGS) $(SSRC) $(LDFLAGS) -o $(SOUTPUT)
 	
-client:
+client: cleanClient
 	$(CC) $(CFLAGS) $(CSRC) $(LDFLAGS) -o $(COUTPUT)
 	
 clean:
 	rm -rf $(OUTPUT)
+	
+cleanClient:
+	rm -rf $(COUTPUT)

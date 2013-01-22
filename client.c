@@ -23,6 +23,9 @@ typedef struct srp_arg_st {
 	int strength /* minimal size for N */;
 } SRP_CLIENT_ARG;
 
+// for srp callbacks
+SRP_CLIENT_ARG srp_client_arg = {"password","user",0,0,0,1024};
+
 int OpenConnection(const char *hostname, int port) {
 	int sd;
     struct hostent *host;
@@ -47,21 +50,11 @@ int OpenConnection(const char *hostname, int port) {
 }
 
 static char *ssl_give_srp_client_pwd_cb(SSL *s, void *arg) {
-	// FIXME: arg is empty...
-//	SRP_CLIENT_ARG *srp_client_arg = (SRP_CLIENT_ARG *)arg;
-//	int i;
-//	for(i = 0; i < 30; ++i){
-//		printf("%p : %lx\n", (SRP_CLIENT_ARG*)arg+i*sizeof(char), (unsigned long)*((char*)arg+i*sizeof(char)));
-//	}
-//	return BUF_strdup((char *)srp_client_arg->srppassin);
-	char* pwd = "password";
-	return BUF_strdup(pwd);
+	return BUF_strdup((char *)((SRP_CLIENT_ARG *)arg)->srppassin);
 }
 
 SSL_CTX* InitCTX(void) {
 	SSL_CTX *ctx;
-	// for srp callbacks
-	SRP_CLIENT_ARG srp_client_arg = {"password","user",0,0,0,1024};
 
     OpenSSL_add_all_algorithms();  /* Load cryptos, et.al. */
     SSL_load_error_strings();   /* Bring in and register error messages */
