@@ -12,8 +12,9 @@
 
 #define FAIL    -1
 
-/* SRP client */
-/* This is a context that we pass to all callbacks */
+// SRP client
+
+// This is a context that we pass to all client callbacks
 typedef struct srp_arg_st {
 	char *srppassin;
 	char *srplogin;
@@ -26,7 +27,7 @@ typedef struct srp_arg_st {
 // for srp callbacks
 SRP_CLIENT_ARG srp_client_arg = {"password","user",0,0,0,1024};
 
-int OpenConnection(const char *hostname, int port) {
+int startSocketConnection(const char *hostname, int port) {
 	int sd;
     struct hostent *host;
     struct sockaddr_in addr;
@@ -35,17 +36,19 @@ int OpenConnection(const char *hostname, int port) {
 		perror(hostname);
 		abort();
 	}
+
 	sd = socket(PF_INET, SOCK_STREAM, 0);
-//	bzero(&addr, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
 	addr.sin_addr.s_addr = *((in_addr_t *) host->h_addr);
 	bzero (&(addr.sin_zero), 8);
+
 	if (connect(sd, (struct sockaddr*) &addr, sizeof(struct sockaddr)) != 0) {
 		close(sd);
 		perror(hostname);
 		abort();
 	}
+
     return sd;
 }
 
@@ -53,59 +56,51 @@ static char *ssl_give_srp_client_pwd_cb(SSL *s, void *arg) {
 	return BUF_strdup((char *)((SRP_CLIENT_ARG *)arg)->srppassin);
 }
 
-SSL_CTX* InitCTX(void) {
+SSL_CTX* InitClientCTX(void) {
 	SSL_CTX *ctx;
 
-    OpenSSL_add_all_algorithms();  /* Load cryptos, et.al. */
-    SSL_load_error_strings();   /* Bring in and register error messages */
+	// Init OpenSSL
+    OpenSSL_add_all_algorithms();
+    SSL_load_error_strings();
     SSL_library_init();
-    const SSL_METHOD *method = TLSv1_client_method();  /* Create new client-method instance */
-    ctx = SSL_CTX_new(method);   /* Create new context */
+
+    // create new SSL context
+    const SSL_METHOD *method = TLSv1_client_method();
+    ctx = SSL_CTX_new(method);
 	if (ctx == NULL) {
 		ERR_print_errors_fp(stderr);
 		abort();
 	}
 
-	// Bug workarounds
+	// Bug workarounds // XXX: necessary?
 	SSL_CTX_set_options(ctx,SSL_OP_ALL);
 
-	// XXX: what does this?
-//	SSL_CTX_set_options(ctx, SSL_OP_ALL | SSL_OP_NO_SSLv2);
-	// SRP
+	// SRP // XXX: necessary?
 	SSL_CTX_SRP_CTX_init(ctx);
-	// set cipher list
+
+	// set cipher list -> only want SRP without certs here
 	if (SSL_CTX_set_cipher_list(ctx, "aNULL:!eNULL:!LOW:!EXPORT:@STRENGTH:!ADH:!AECDH") != 1){
 		printf("SSL_CTX_set_cipher_list failed");
 	}
 
-    // set SRP stuff (user and password)
+    // set SRP susername
     if (!SSL_CTX_set_srp_username(ctx, srp_client_arg.srplogin)){
     	printf("SSL_CTX_set_srp_username failed");
     	ERR_print_errors_fp(stderr);
     }
 
+    // hand over srp_client_arg to context
+    // give callbacks to context
     SSL_CTX_set_srp_cb_arg(ctx,&srp_client_arg);
     SSL_CTX_set_srp_client_pwd_callback(ctx, ssl_give_srp_client_pwd_cb);
     SSL_CTX_set_srp_strength(ctx, srp_client_arg.strength);
-//    if (srp_client_arg.msg || srp_client_arg.debug || srp_client_arg.amp == 0)
-//    	SSL_CTX_set_srp_verify_param_callback(ctx, ssl_srp_verify_param_cb);
-
-//    if (SSL_CTX_set_srp_password(ctx, (char *) "password") != 1){
-//    	printf("SSL_CTX_set_srp_password failed");
-//    	ERR_print_errors_fp(stderr);
-//    }
-//
-//    if (SSL_CTX_set_srp_strength(ctx, 1024) != 1){
-//    	printf("SSL_CTX_set_srp_strength failed");
-//    	ERR_print_errors_fp(stderr);
-//    }
 
 	return ctx;
 }
 
 int main(int argc, char **argv) {
-	if (argc < 2) {
-		printf("Usage: ./server <server> <port>\n");
+	if (argc < 4) {
+		printf("Usage: ./server <server> <port> <Message>\n");
 		return 1;
 	}
 
@@ -115,34 +110,41 @@ int main(int argc, char **argv) {
 	char buf[1024];
     int bytes;
 
-    ctx = InitCTX();
+    // create client context
+    ctx = InitClientCTX();
 
-    server = OpenConnection(argv[1], atoi(argv[2]));
+    // start socket connection to server
+    server = startSocketConnection(argv[1], atoi(argv[2]));
     printf("Connected to %s:%s\n", argv[1],argv[2]);
 
-    ssl = SSL_new(ctx);      /* create new SSL connection state */
-    printf("Created ssl from ctx\n");
+    // create new SSL from context
+    ssl = SSL_new(ctx);
 
-    SSL_set_fd(ssl, server);    /* attach the socket descriptor */
-    printf("attached ssl to socket\n");
+    // bind SSL to server socket connection
+    SSL_set_fd(ssl, server);
 
+    // connect to SSL server -> do handshake stuff
     int error = SSL_get_error(ssl, SSL_connect(ssl));
 
-    if (error != SSL_ERROR_NONE) {    /* do SSL-protocol accept SSL_connect(ssl) != 1*/
+    if (error != SSL_ERROR_NONE) {
     	ERR_print_errors_fp (stderr);
     	printf("Error opening SSL connection: %d\n", error);
-    } else {
+    } else { // if handshake was successful we have a SSL connection now
     	printf("Successfully connected to Server via SSL\n");
-		char *msg = "Hello???";
+		char *msg = argv[3];
 
 		printf("Connected with %s encryption\n", SSL_get_cipher(ssl));
-		SSL_write(ssl, msg, strlen(msg)); /* encrypt & send message */
-		bytes = SSL_read(ssl, buf, sizeof(buf)); /* get reply & decrypt */
+
+		// do a dummy communication
+		SSL_write(ssl, msg, strlen(msg));
+		bytes = SSL_read(ssl, buf, sizeof(buf));
 		buf[bytes] = 0;
 		printf("Received: \"%s\"\n", buf);
-		SSL_free(ssl); /* release connection state */
+
+		SSL_free(ssl);
 	}
-    close(server);         /* close socket */
-    SSL_CTX_free(ctx);        /* release context */
+    close(server);
+    SSL_CTX_free(ctx);
+
     return 0;
 }

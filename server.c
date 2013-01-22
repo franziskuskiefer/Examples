@@ -13,8 +13,9 @@
 
 #define FAIL    -1
 
-/* SRP server */
-/* This is a context that we pass to SRP server callbacks */
+// SRP server
+
+// This is a context that we pass to SRP server callbacks
 typedef struct srp_server_arg_st {
 	char *expected_user;
 	char *pass;
