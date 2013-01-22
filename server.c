@@ -20,12 +20,14 @@ typedef struct srp_server_arg_st {
 	char *pass;
 } SRP_SERVER_ARG;
 
+// for srp callbacks
+SRP_SERVER_ARG srp_server_arg = {"user","password"};
+
 int OpenListener(int port) {
 	int sd;
 	struct sockaddr_in addr;
 
 	sd = socket(PF_INET, SOCK_STREAM, 0);
-//	bzero(&addr, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	addr.sin_addr.s_addr = INADDR_ANY;
@@ -43,64 +45,50 @@ int OpenListener(int port) {
 
 static int ssl_srp_server_param_cb(SSL *s, int *ad, void *arg) {
 	SRP_SERVER_ARG * p = (SRP_SERVER_ARG *) arg;
-//	int i;
-//	printf("arg@: %p\n", arg);
-//	for(i = 0; i < 30; ++i){
-//		printf("%d: %lu\n", i, (unsigned long)*((char*)((SRP_SERVER_ARG*)arg)+i*sizeof(char)));
-//	}
-//	printf("user[0]: %c\n", *(char*)((SRP_SERVER_ARG*)arg));
-//	printf("user[1]: %c\n", *((char*)((SRP_SERVER_ARG*)arg)+sizeof(char)));
-//	printf("user[2]: %c\n", *((char*)((SRP_SERVER_ARG*)arg)+2*sizeof(char)));
+	if (strcmp(p->expected_user, SSL_get_srp_username(s)) != 0) {
+		fprintf(stderr, "User %s doesn't exist\n", SSL_get_srp_username(s));
+		return SSL3_AL_FATAL;
+	}
+	if (SSL_set_srp_server_param_pw(s, p->expected_user, p->pass, "1024") < 0) {
+		*ad = SSL_AD_INTERNAL_ERROR;
+		return SSL3_AL_FATAL;
+	}
 
-//	printf("SSL_get_srp_username(s): %s", SSL_get_srp_username(s));
-////	printf("p->expected_user: %s", p->expected_user);
-
-	// FIXME: arg is empty...somehow the server does not know any user or password...
-//	if (strcmp(p->expected_user, SSL_get_srp_username(s)) != 0) {
-//		fprintf(stderr, "User %s doesn't exist\n", SSL_get_srp_username(s));
-//		return SSL3_AL_FATAL;
-//	}
-//	if (SSL_set_srp_server_param_pw(s, p->expected_user, p->pass, "1024") < 0) {
-//		*ad = SSL_AD_INTERNAL_ERROR;
-//		return SSL3_AL_FATAL;
-//	}
-
-	SSL_set_srp_server_param_pw(s, SSL_get_srp_username(s), "password", "1024");
+//	SSL_set_srp_server_param_pw(s, SSL_get_srp_username(s), "password", "1024");
 
 	return SSL_ERROR_NONE;
 }
 
-// FIXME: dummy function
 static int verify_callback(int ok, X509_STORE_CTX *ctx) {
-	printf("ok: %d", ok);
+	// XXX: dummy function, but not needed, as we have no cert here!
 	return ok;
 }
 
 SSL_CTX* InitServerCTX(void) {
 	SSL_CTX *ctx;
-	// for srp callbacks
-	SRP_SERVER_ARG srp_server_arg = {"user","password"};
 
-	OpenSSL_add_all_algorithms();  /* load & register all cryptos, etc. */
-	SSL_load_error_strings();   /* load all error messages */
+	// Init OpenSSL
+	OpenSSL_add_all_algorithms();
+	SSL_load_error_strings();
 	SSL_library_init();
-	const SSL_METHOD *method = TLSv1_server_method();  /* create new server-method instance */
-	ctx = SSL_CTX_new(method);   /* create new context from method */
 
-	// set
-
-	// need also SRP
-	SSL_CTX_SRP_CTX_init(ctx);
+	const SSL_METHOD *method = TLSv1_server_method();
+	ctx = SSL_CTX_new(method);
 	if (ctx == NULL) {
 		ERR_print_errors_fp(stderr);
 		abort();
 	}
+
+	// FIXME: needed?
+	SSL_CTX_SRP_CTX_init(ctx);
+
 	// set cipher list
+	// we only want SRP algorithms without any ceritificates
 	if (SSL_CTX_set_cipher_list(ctx, "aNULL:!eNULL:!LOW:!EXPORT:@STRENGTH:!ADH:!AECDH") != 1) {
-		// aNULL:!eNULL:!LOW:!EXPORT:@STRENGTH
 		printf("SSL_CTX_set_cipher_list failed\n");
 	}
 
+	// set callbacks and give the parameters (username,password) to the context
 	SSL_CTX_set_verify(ctx,SSL_VERIFY_NONE,verify_callback);
 	SSL_CTX_set_srp_cb_arg(ctx, &srp_server_arg);
 	SSL_CTX_set_srp_username_callback(ctx, ssl_srp_server_param_cb);
