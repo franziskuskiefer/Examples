@@ -1,4 +1,9 @@
-//SSL-Server.c
+/**
+ * SSL SRP Server
+ *
+ * author franziskus
+ */
+
 #include <errno.h>
 #include <unistd.h>
 #include <malloc.h>
@@ -10,10 +15,6 @@
 #include <resolv.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-
-#define FAIL    -1
-
-// SRP server
 
 // This is a context that we pass to SRP server callbacks
 typedef struct srp_server_arg_st {
@@ -80,7 +81,7 @@ SSL_CTX* InitServerCTX(void) {
 		abort();
 	}
 
-	// FIXME: needed?
+	// XXX: needed?
 	SSL_CTX_SRP_CTX_init(ctx);
 
 	// set cipher list

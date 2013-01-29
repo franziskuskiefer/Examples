@@ -1,4 +1,9 @@
-//SSL-Client.c
+/**
+ * SSL SRP Client
+ *
+ * author franziskus
+ */
+
 #include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
@@ -9,10 +14,6 @@
 #include <netdb.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-
-#define FAIL    -1
-
-// SRP client
 
 // This is a context that we pass to all client callbacks
 typedef struct srp_arg_st {
