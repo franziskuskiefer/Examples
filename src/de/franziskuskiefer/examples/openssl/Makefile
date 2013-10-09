@@ -1,8 +1,7 @@
 # TLS SRP Server - Client Test
 CC=gcc
-OPENSSL=/home/franziskus/Surrey/workspace/openssl-1.0.1c
-CGLAGS=-I $(OPENSSL)/include/
-LDFLAGS=-L $(OPENSSL) -lssl -lcrypto -ldl
+CFLAGS=
+LDFLAGS=-lssl -lcrypto 
 
 COUTPUT=client
 CSRC=client.c
@@ -26,3 +25,4 @@ clean:
 	
 cleanClient:
 	rm -rf $(COUTPUT)
+
